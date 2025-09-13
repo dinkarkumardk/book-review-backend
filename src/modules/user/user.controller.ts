@@ -54,7 +54,7 @@ export const toggleFavorite = async (req: AuthenticatedRequest, res: Response) =
   }
 };
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../generated/prisma';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
