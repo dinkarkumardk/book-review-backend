@@ -1,33 +1,25 @@
 import express from 'express';
+import cors from 'cors';
 import userRoutes from './modules/user/user.routes';
 import bookRoutes from './modules/book/book.routes';
 import reviewRoutes from './modules/review/review.routes';
 
 const app = express();
-const PORT = 3001;
+const PORT = 3001; // ensure this matches what frontend points to
 
-// CORS middleware to handle cross-origin requests
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const allowedOrigins = ['http://localhost:5173', 'http://localhost:5175', 'http://localhost:3000'];
-  
-  // Set CORS headers for all requests
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-  
-  next();
-});
+const allowedOrigins = new Set(
+  Array.from({ length: 13 }, (_, i) => 5173 + i).map(p => `http://localhost:${p}`)
+);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 
 // Body-parsing middleware to populate req.body
 app.use(express.json());

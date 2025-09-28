@@ -53,6 +53,36 @@ export const toggleFavorite = async (req: AuthenticatedRequest, res: Response) =
     return res.status(500).json({ error: 'Failed to toggle favorite.' });
   }
 };
+
+export const listFavorites = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const favorites = await prisma.favorite.findMany({
+      where: { userId },
+      include: { book: true },
+      orderBy: { id: 'desc' }
+    });
+    return res.json(favorites.map(f => f.book));
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to fetch favorites.' });
+  }
+};
+
+export const listUserReviews = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const reviews = await prisma.review.findMany({
+      where: { userId },
+      include: { book: { select: { id: true, title: true, author: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(reviews);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to fetch user reviews.' });
+  }
+};
 import { Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import bcrypt from 'bcrypt';
@@ -100,4 +130,9 @@ export const loginUser = async (req: Request, res: Response) => {
   } catch (error) {
     return res.status(500).json({ error: 'Login failed.' });
   }
+};
+
+export const logoutUser = async (req: Request, res: Response) => {
+  // For stateless JWT, client just discards token. Provide consistent response.
+  return res.json({ message: 'Logged out.' });
 };

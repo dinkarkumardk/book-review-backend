@@ -24,13 +24,58 @@ async function recalculateBookStats(bookId: number) {
   });
 }
 
+export const getBookReviews = async (req: AuthenticatedRequest, res: Response) => {
+  const { bookId } = req.params;
+  try {
+    const reviews = await prisma.review.findMany({
+      where: { bookId: Number(bookId) },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true } },
+      },
+    });
+    return res.json(reviews);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to fetch reviews.' });
+  }
+};
+
+export const getReview = async (req: AuthenticatedRequest, res: Response) => {
+  const { reviewId } = req.params;
+  try {
+    const review = await prisma.review.findUnique({
+      where: { id: Number(reviewId) },
+      include: { user: { select: { id: true, name: true } } },
+    });
+    if (!review) return res.status(404).json({ error: 'Review not found.' });
+    return res.json(review);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to fetch review.' });
+  }
+};
+
+export const getBookReviewSummary = async (req: AuthenticatedRequest, res: Response) => {
+  const { bookId } = req.params;
+  try {
+    const book = await prisma.book.findUnique({ where: { id: Number(bookId) }, select: { id: true, avgRating: true, reviewCount: true } });
+    if (!book) return res.status(404).json({ error: 'Book not found.' });
+    return res.json({ bookId: book.id, avgRating: book.avgRating, reviewCount: book.reviewCount });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to fetch review summary.' });
+  }
+};
+
 export const createReview = async (req: AuthenticatedRequest, res: Response) => {
   const { bookId } = req.params;
   const { rating, text } = req.body;
   const userId = req.userId;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-  if (!rating || !text) return res.status(400).json({ error: 'Rating and text required.' });
+  if (rating === undefined || rating === null || !text) return res.status(400).json({ error: 'Rating and text required.' });
+  if (typeof rating !== 'number' || rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
   try {
+    // Prevent duplicate review by same user on same book (enforce single review per user/book)
+    const existing = await prisma.review.findFirst({ where: { userId, bookId: Number(bookId) } });
+    if (existing) return res.status(409).json({ error: 'User has already reviewed this book.' });
     const review = await prisma.review.create({
       data: {
         rating,
@@ -55,6 +100,9 @@ export const updateReview = async (req: AuthenticatedRequest, res: Response) => 
     const review = await prisma.review.findUnique({ where: { id: Number(reviewId) } });
     if (!review) return res.status(404).json({ error: 'Review not found.' });
     if (review.userId !== userId) return res.status(403).json({ error: 'Forbidden: Not review author.' });
+    if (rating !== undefined) {
+      if (typeof rating !== 'number' || rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
+    }
     const updated = await prisma.review.update({
       where: { id: Number(reviewId) },
       data: { rating, text },
