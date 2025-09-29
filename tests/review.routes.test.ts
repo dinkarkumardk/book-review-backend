@@ -24,7 +24,13 @@ describe('Review Routes', () => {
         updatedAt: '2025-09-28T14:38:51.559Z',
       };
       
+      // Mock findFirst to return null (no existing review)
+      (prisma.review.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.review.create as jest.Mock).mockResolvedValue(mockReview);
+      // Mock review.findMany for stats recalculation
+      (prisma.review.findMany as jest.Mock).mockResolvedValue([mockReview]);
+      // Mock book update for stats recalculation
+      (prisma.book.update as jest.Mock).mockResolvedValue({});
 
       const res = await request(app)
         .post('/api/books/1/reviews')
@@ -56,6 +62,10 @@ describe('Review Routes', () => {
       
       (prisma.review.findUnique as jest.Mock).mockResolvedValue(mockReview);
       (prisma.review.update as jest.Mock).mockResolvedValue(mockReview);
+      // Mock review.findMany for stats recalculation
+      (prisma.review.findMany as jest.Mock).mockResolvedValue([mockReview]);
+      // Mock book update for stats recalculation
+      (prisma.book.update as jest.Mock).mockResolvedValue({});
 
       const res = await request(app)
         .put('/api/reviews/1')
@@ -108,6 +118,10 @@ describe('Review Routes', () => {
       
       (prisma.review.findUnique as jest.Mock).mockResolvedValue(mockReview);
       (prisma.review.delete as jest.Mock).mockResolvedValue(mockReview);
+      // Mock review.findMany for stats recalculation
+      (prisma.review.findMany as jest.Mock).mockResolvedValue([]);
+      // Mock book update for stats recalculation
+      (prisma.book.update as jest.Mock).mockResolvedValue({});
 
       const res = await request(app)
         .delete('/api/reviews/1')
