@@ -17,23 +17,19 @@ For rapid development and deployment, we will use a simple, classic architecture
 ## 3. API Endpoints
 Auth suffix denotes endpoints requiring Bearer token.
 
-- `POST /api/auth/signup`
-- `POST /api/auth/login`
-- `POST /api/auth/logout` (Auth)
-- `GET /api/auth/me` (Auth) – alias of profile summary
-- `GET /api/books?page=1&search=query`
-- `GET /api/books/:id`
-- `POST /api/books/:id/reviews` (Auth)
-- `PUT /api/reviews/:id` (Auth, Owner)
-- `DELETE /api/reviews/:id` (Auth, Owner)
-- `GET /api/profile` (Auth) – includes embedded basic favorites & reviews summary
-- `POST /api/profile/favorites` (Auth) – toggle favorite
-- `GET /api/profile/favorites` (Auth) – list favorite books
-- `GET /api/profile/reviews` (Auth) – list user reviews with book metadata
-- `GET /api/recommendations` (Auth) – hybrid (favorites genres + top-rated fallback)
-- `GET /api/recommendations/top-rated` – public top-rated list
-- `GET /api/recommendations/llm` (Auth) – LLM powered (requires OPENAI_API_KEY env var)
 
+
+### Operational Endpoints
+
+Liveness (no DB):
+- `GET /health`
+- `GET /api/health`
+
+Readiness (DB connectivity check):
+- `GET /ready`
+- `GET /api/ready`
+
+Readiness returns 200 with `db: ok` if a lightweight `SELECT NOW()` succeeds, otherwise 503 with error details. Use liveness for container/PM2 restarts and readiness for deploy verification.
 ### Recommendation Strategy
 1. Hybrid (default):
 	- If user has favorites: aggregate top 3 genres → fetch best books in those genres ordered by rating & review count.

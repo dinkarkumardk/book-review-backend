@@ -1,4 +1,11 @@
 import { AuthenticatedRequest } from '../../middleware/auth.middleware';
+import { Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+const prisma = new PrismaClient();
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 
 export const getUserProfile = async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.userId;
@@ -63,7 +70,7 @@ export const listFavorites = async (req: AuthenticatedRequest, res: Response) =>
       include: { book: true },
       orderBy: { id: 'desc' }
     });
-    return res.json(favorites.map(f => f.book));
+  return res.json(favorites.map((f: any) => f.book));
   } catch (error) {
     return res.status(500).json({ error: 'Failed to fetch favorites.' });
   }
@@ -83,13 +90,7 @@ export const listUserReviews = async (req: AuthenticatedRequest, res: Response) 
     return res.status(500).json({ error: 'Failed to fetch user reviews.' });
   }
 };
-import { Request, Response } from 'express';
-import { PrismaClient } from '../../generated/prisma';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
+// (imports and constants moved to top)
 
 export const registerUser = async (req: Request, res: Response) => {
   const { name, email, password } = req.body;

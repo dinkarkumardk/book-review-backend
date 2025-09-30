@@ -13,13 +13,14 @@ export const getRecommendations = async (req: AuthenticatedRequest, res: Respons
 };
 
 import { Request, Response } from 'express';
-import { PrismaClient } from '../../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 export const getBooks = async (req: Request, res: Response) => {
-  const { page = 1, search = '', meta } = req.query;
-  const pageSize = 10;
+  const { page = 1, search = '', meta, limit } = req.query;
+  // Allow limit parameter to override default pageSize, with a max limit of 100 for performance
+  const pageSize = limit ? Math.min(Number(limit), 100) : 10;
   const pageNumber = Number(page) < 1 ? 1 : Number(page);
   const skip = (pageNumber - 1) * pageSize;
   try {

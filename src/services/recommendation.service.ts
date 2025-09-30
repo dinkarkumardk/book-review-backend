@@ -1,8 +1,8 @@
-import { PrismaClient, Book } from '../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export async function getHybridRecommendations(userId: number | undefined, limit = 10): Promise<Book[]> {
+export async function getHybridRecommendations(userId: number | undefined, limit = 10) {
   // If no user, fall back to top-rated
   if (!userId) {
     return prisma.book.findMany({
@@ -16,8 +16,8 @@ export async function getHybridRecommendations(userId: number | undefined, limit
     include: { book: true },
   });
   const genreCounts: Record<string, number> = {};
-  favorites.forEach(fav => {
-    fav.book.genres.forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; });
+  favorites.forEach((fav: any) => {
+    fav.book.genres.forEach((g: string) => { genreCounts[g] = (genreCounts[g] || 0) + 1; });
   });
   const favoriteGenres = Object.entries(genreCounts)
     .sort((a,b) => b[1]-a[1])
@@ -40,7 +40,7 @@ export async function getHybridRecommendations(userId: number | undefined, limit
 
   // Deduplicate and slice
   const seen = new Set<number>();
-  const combined: Book[] = [];
+  const combined: any[] = [];
   for (const b of genreBooks) {
     if (!seen.has(b.id)) { seen.add(b.id); combined.push(b); }
     if (combined.length >= limit) break;

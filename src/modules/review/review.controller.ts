@@ -1,11 +1,11 @@
 import { Response } from 'express';
-import { PrismaClient } from '../../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { AuthenticatedRequest } from '../../middleware/auth.middleware';
 
 const prisma = new PrismaClient();
 
 async function recalculateBookStats(bookId: number) {
-  return await prisma.$transaction(async (tx) => {
+  return await prisma.$transaction(async (tx: any) => {
     const reviews = await tx.review.findMany({
       where: { bookId },
       select: { rating: true },
