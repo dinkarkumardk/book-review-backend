@@ -1,0 +1,105 @@
+name: Backend Deploy
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'prisma/**'
+  workflow_dispatch: {}
+
+env:
+  NODE_VERSION: 18
+  AWS_REGION: us-east-1
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Build
+        run: npm run build
+
+      - name: Package
+        run: |
+          mkdir -p deploy-package
+          cp -r dist deploy-package/
+          cp -r node_modules deploy-package/
+          cp -r prisma deploy-package/
+          cp package*.json deploy-package/
+          tar -czf backend-deploy.tar.gz -C deploy-package .
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve EC2 Instance
+        id: ec2
+        run: |
+          IID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=bookverse-backend" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].InstanceId' --output text)
+          IP=$(aws ec2 describe-instances --instance-ids $IID --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          echo "instance_id=$IID" >> $GITHUB_OUTPUT
+          echo "public_ip=$IP" >> $GITHUB_OUTPUT
+
+      - name: Copy Artifact
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ steps.ec2.outputs.public_ip }}
+            
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          source: backend-deploy.tar.gz
+          target: /tmp/
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ steps.ec2.outputs.public_ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            sudo systemctl stop bookverse || true
+            sudo -u bookverse pm2 delete bookverse-backend || true
+            sudo mkdir -p /opt/bookverse/book-review-backend
+            sudo chown bookverse:bookverse /opt/bookverse/book-review-backend
+            cd /opt/bookverse/book-review-backend
+            sudo -u bookverse tar -xzf /tmp/backend-deploy.tar.gz
+            sudo rm /tmp/backend-deploy.tar.gz
+            cat > .env <<EOF
+            NODE_ENV=production
+            PORT=3001
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            EOF
+            npx prisma migrate deploy || true
+            pm2 start dist/index.js --name bookverse-backend || pm2 restart bookverse-backend
+            pm2 save
+            sudo systemctl restart nginx || true
+            sleep 8
+            curl -f http://localhost:3001/health || (echo 'Health check failed' && exit 1)
+
+      - name: Done
+        run: echo "Backend deployment complete to ${{ steps.ec2.outputs.public_ip }}"

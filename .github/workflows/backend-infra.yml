@@ -1,0 +1,91 @@
+name: Backend Infrastructure
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'terraform/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'terraform/**'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        default: 'plan'
+        type: choice
+        options: [ plan, apply, destroy ]
+
+env:
+  TF_VERSION: 1.6.0
+  AWS_REGION: us-east-1
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Init
+        working-directory: ./terraform
+        run: terraform init -input=false
+
+      - name: Plan/Apply/Destroy
+        working-directory: ./terraform
+        env:
+          DB_PASSWORD: ${{ secrets.TF_VAR_DATABASE_PASSWORD }}
+          JWT_SECRET: ${{ secrets.TF_VAR_JWT_SECRET }}
+          KEYPAIR: ${{ secrets.TF_VAR_KEY_PAIR_NAME }}
+        run: |
+          ACTION=${{ github.event.inputs.action || 'plan' }}
+          case "$ACTION" in
+            plan)
+              terraform plan \
+                -var="database_password=$DB_PASSWORD" \
+                -var="jwt_secret=$JWT_SECRET" \
+                -var="key_pair_name=$KEYPAIR" \
+                -out=tfplan
+              ;;
+            apply)
+              terraform plan \
+                -var="database_password=$DB_PASSWORD" \
+                -var="jwt_secret=$JWT_SECRET" \
+                -var="key_pair_name=$KEYPAIR" \
+                -out=tfplan
+              terraform apply -auto-approve tfplan
+              ;;
+            destroy)
+              terraform destroy -auto-approve \
+                -var="database_password=$DB_PASSWORD" \
+                -var="jwt_secret=$JWT_SECRET" \
+                -var="key_pair_name=$KEYPAIR"
+              ;;
+            *) echo "Unknown action" && exit 1 ;;
+          esac
+
+      - name: Outputs
+        if: github.event.inputs.action == 'apply'
+        working-directory: ./terraform
+        run: terraform output -json > backend-outputs.json
+
+      - name: Upload Outputs
+        if: github.event.inputs.action == 'apply'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-infra-outputs
+          path: terraform/backend-outputs.json
