@@ -40,7 +40,7 @@ resource "aws_vpc" "main" {
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
-  tags = { Name = "${var.project_name}-igw" }
+  tags   = { Name = "${var.project_name}-igw" }
 }
 
 resource "aws_subnet" "public_1" {
@@ -166,7 +166,7 @@ resource "aws_security_group" "rds" {
 
 # IAM Role & Instance Profile
 resource "aws_iam_role" "backend_role" {
-  name               = "${var.project_name}-backend-role"
+  name = "${var.project_name}-backend-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -185,7 +185,7 @@ resource "aws_iam_instance_profile" "backend_profile" {
 
 # RDS + monitoring role
 resource "aws_iam_role" "rds_monitoring" {
-  name               = "${var.project_name}-rds-monitoring-role"
+  name = "${var.project_name}-rds-monitoring-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -225,31 +225,31 @@ resource "aws_db_parameter_group" "postgres" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier                     = "${var.project_name}-db"
-  engine                         = "postgres"
-  engine_version                 = "15.7"
-  instance_class                 = "db.t3.micro"
-  allocated_storage              = 20
-  max_allocated_storage          = 100
-  storage_type                   = "gp3"
-  storage_encrypted              = true
-  db_name                        = var.database_name
-  username                       = var.database_username
-  password                       = var.database_password
-  db_subnet_group_name           = aws_db_subnet_group.main.name
-  vpc_security_group_ids         = [aws_security_group.rds.id]
-  publicly_accessible            = false
-  backup_retention_period        = 7
-  backup_window                  = "03:00-04:00"
-  maintenance_window             = "sun:04:00-sun:05:00"
-  parameter_group_name           = aws_db_parameter_group.postgres.name
-  monitoring_interval            = 60
-  monitoring_role_arn            = aws_iam_role.rds_monitoring.arn
-  deletion_protection            = false
-  skip_final_snapshot            = true
-  performance_insights_enabled   = true
+  identifier                            = "${var.project_name}-db"
+  engine                                = "postgres"
+  engine_version                        = "15.7"
+  instance_class                        = "db.t3.micro"
+  allocated_storage                     = 20
+  max_allocated_storage                 = 100
+  storage_type                          = "gp3"
+  storage_encrypted                     = true
+  db_name                               = var.database_name
+  username                              = var.database_username
+  password                              = var.database_password
+  db_subnet_group_name                  = aws_db_subnet_group.main.name
+  vpc_security_group_ids                = [aws_security_group.rds.id]
+  publicly_accessible                   = false
+  backup_retention_period               = 7
+  backup_window                         = "03:00-04:00"
+  maintenance_window                    = "sun:04:00-sun:05:00"
+  parameter_group_name                  = aws_db_parameter_group.postgres.name
+  monitoring_interval                   = 60
+  monitoring_role_arn                   = aws_iam_role.rds_monitoring.arn
+  deletion_protection                   = false
+  skip_final_snapshot                   = true
+  performance_insights_enabled          = true
   performance_insights_retention_period = 7
-  tags                           = { Name = "${var.project_name}-database" }
+  tags                                  = { Name = "${var.project_name}-database" }
 }
 
 # S3 bucket for backend assets (covers etc.)
@@ -277,6 +277,7 @@ resource "aws_s3_bucket_policy" "backend_assets" {
       Resource  = "${aws_s3_bucket.backend_assets.arn}/*"
     }]
   })
+  depends_on = [aws_s3_bucket_public_access_block.backend_assets]
 }
 
 # EC2 instance for backend
@@ -289,8 +290,17 @@ resource "aws_instance" "backend" {
   iam_instance_profile   = aws_iam_instance_profile.backend_profile.name
   user_data = base64encode(<<EOT
 #!/bin/bash
-curl -sL https://rpm.nodesource.com/setup_18.x | bash -
-yum install -y nodejs git
+set -e
+
+NODE_VERSION="16.20.2"
+NODE_ARCHIVE="node-v$${NODE_VERSION}-linux-x64"
+curl -fsSL "https://nodejs.org/dist/v$${NODE_VERSION}/$${NODE_ARCHIVE}.tar.xz" -o /tmp/node.tar.xz
+tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+rm -f /tmp/node.tar.xz
+ln -sf /usr/local/bin/node /usr/bin/node
+ln -sf /usr/local/bin/npm /usr/bin/npm
+ln -sf /usr/local/bin/npx /usr/bin/npx
+yum install -y git
 useradd -m bookverse || true
 su - bookverse -c "mkdir -p /opt/bookverse"
 cat > /opt/bookverse/.env <<ENVEOF
@@ -314,8 +324,8 @@ EOT
 }
 
 resource "aws_eip" "backend" {
-  domain   = "vpc"
-  instance = aws_instance.backend.id
+  domain     = "vpc"
+  instance   = aws_instance.backend.id
   depends_on = [aws_internet_gateway.igw]
   tags = {
     Name = "${var.project_name}-backend-eip"

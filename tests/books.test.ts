@@ -1,6 +1,6 @@
 import request from 'supertest';
 import app from '../src/app';
-import { PrismaClient } from '../src/generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { createValidToken } from './setup';
 
 const prisma = new PrismaClient();
@@ -12,7 +12,7 @@ describe('Book Routes', () => {
       title: 'Test Book 1',
       author: 'Author 1',
       description: 'Description 1',
-      coverImage: 'cover1.jpg',
+  coverImageURL: 'cover1.jpg',
       avgRating: 4.5,
       reviewCount: 10,
       publishedYear: 2023
@@ -22,7 +22,7 @@ describe('Book Routes', () => {
       title: 'Test Book 2',
       author: 'Author 2',
       description: 'Description 2',
-      coverImage: 'cover2.jpg',
+  coverImageURL: 'cover2.jpg',
       avgRating: 3.8,
       reviewCount: 5,
       publishedYear: 2022
@@ -48,7 +48,7 @@ describe('Book Routes', () => {
         },
         skip: 0,
         take: 10,
-        orderBy: { id: 'asc' },
+        orderBy: { title: 'asc' },
       });
     });
 
@@ -106,7 +106,7 @@ describe('Book Routes', () => {
         },
         skip: 0,
         take: 10,
-        orderBy: { id: 'asc' },
+        orderBy: { title: 'asc' },
       });
     });
 
@@ -127,7 +127,7 @@ describe('Book Routes', () => {
         },
         skip: 10, // page 2, skip first 10
         take: 10,
-        orderBy: { id: 'asc' },
+        orderBy: { title: 'asc' },
       });
     });
 
@@ -148,7 +148,7 @@ describe('Book Routes', () => {
         },
         skip: 0, // Should default to page 1
         take: 10,
-        orderBy: { id: 'asc' },
+        orderBy: { title: 'asc' },
       });
     });
 
@@ -160,6 +160,43 @@ describe('Book Routes', () => {
         .expect(500);
 
       expect(response.body.error).toBe('Failed to fetch books.');
+    });
+  });
+
+  describe('GET /api/books/search', () => {
+    it('should return empty payload if query missing', async () => {
+      const response = await request(app)
+        .get('/api/books/search')
+        .expect(200);
+
+      expect(response.body).toEqual({ data: [], page: 1, pageSize: 10, total: 0, totalPages: 0 });
+      expect(prisma.book.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should search books with pagination and filters', async () => {
+      (prisma.book.findMany as jest.Mock).mockResolvedValue([mockBooks[0]]);
+      (prisma.book.count as jest.Mock).mockResolvedValue(1);
+
+      const response = await request(app)
+        .get('/api/books/search?q=Test&page=2&limit=5&genre=Fantasy&sort=rating&order=desc')
+        .expect(200);
+
+      expect(prisma.book.findMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { title: { contains: 'Test', mode: 'insensitive' } },
+            { author: { contains: 'Test', mode: 'insensitive' } },
+          ],
+          genres: { has: 'Fantasy' },
+        },
+        skip: 5,
+        take: 5,
+        orderBy: { avgRating: 'desc' },
+      });
+
+      expect(response.body.page).toBe(2);
+      expect(response.body.pageSize).toBe(5);
+      expect(response.body.total).toBe(1);
     });
   });
 
@@ -221,11 +258,12 @@ describe('Book Routes', () => {
       (prisma.book.findMany as jest.Mock).mockResolvedValue(mockBooks);
 
       const response = await request(app)
-        .get('/api/recommendations')
+        .get('/api/recommendations?limit=10')
         .set('Authorization', `Bearer ${validToken}`)
         .expect(200);
 
-      expect(Array.isArray(response.body)).toBe(true);
+      expect(Array.isArray(response.body.recommendations)).toBe(true);
+      expect(response.body.mode).toBe('hybrid');
     });
 
     it('should return 401 for unauthenticated user', async () => {
@@ -242,7 +280,7 @@ describe('Book Routes', () => {
       (prisma.book.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .get('/api/recommendations')
+        .get('/api/recommendations?limit=11')
         .set('Authorization', `Bearer ${validToken}`)
         .expect(500);
 

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import app from '../src/app';
-import { PrismaClient } from '../src/generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();

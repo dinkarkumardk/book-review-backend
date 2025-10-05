@@ -1,6 +1,6 @@
 import request from 'supertest';
 import app from '../src/app';
-import { PrismaClient } from '../src/generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { createValidToken } from './setup';
 
 const prisma = new PrismaClient();
@@ -42,7 +42,7 @@ describe('User Profile Routes', () => {
     title: 'Test Book',
     author: 'Test Author',
     description: 'Test Description',
-    coverImage: 'cover.jpg',
+  coverImageURL: 'cover.jpg',
     avgRating: 4.5,
     reviewCount: 10
   };

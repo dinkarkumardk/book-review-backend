@@ -15,7 +15,8 @@
     "seed:images:force": "ts-node prisma/seed-images-force.ts",
     "download:covers": "ts-node prisma/download-covers.ts",
     "make:covers:absolute": "ts-node prisma/make-covers-absolute.ts",
-    "create:user": "ts-node prisma/create-user.ts"
+    "create:user": "ts-node prisma/create-user.ts",
+    "seed:report": "ts-node prisma/seed-report.ts"
   },
   "repository": {
     "type": "git",
@@ -45,7 +46,8 @@
     "@types/jsonwebtoken": "9.0.6",
     "@types/node": "18.19.39",
     "@types/supertest": "2.0.16",
-    "@types/jest": "29.5.12",
+  "@types/jest": "29.5.12",
+  "@types/node-fetch": "2.6.11",
     "jest": "29.7.0",
     "supertest": "6.3.3",
     "ts-jest": "29.1.1",

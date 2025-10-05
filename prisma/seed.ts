@@ -1,190 +1,305 @@
 // prisma/seed.ts
 
-import { PrismaClient } from '../src/generated/prisma';
+import { Book, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { BOOK_CATALOG } from './data/bookCatalog';
 
-// initialize Prisma Client
 const prisma = new PrismaClient();
 
+type SeedUserProfile = {
+  name: string;
+  email: string;
+  favoriteGenres: string[];
+  secondaryGenres?: string[];
+};
+
+const DEFAULT_PASSWORD = 'Password@123';
+const GENRES = Array.from(new Set(BOOK_CATALOG.flatMap((book) => [...book.genres]))).sort();
+
+const AUTHOR_FIRST = [
+  'Amelia',
+  'Dominic',
+  'Harper',
+  'Lilia',
+  'Mateo',
+  'Sabrina',
+  'Theo',
+  'Valerie',
+  'Ezra',
+  'Jun',
+  'Priya',
+  'Noah',
+  'Isla',
+  'Cormac',
+  'Aiden',
+  'Sloane',
+  'Mira',
+  'Orion',
+  'Keira',
+  'Devin',
+];
+
+const REVIEW_TEMPLATES: Record<number, string[]> = {
+  5: [
+    'Instant favorite. The pacing and emotional payoff were flawless.',
+    'Could not stop reading—rich worldbuilding and characters I adore.',
+    'A masterclass in genre storytelling; already recommending to friends.',
+    'Electric from start to finish. This is why I love reading.',
+  ],
+  4: [
+    'Beautifully written with just a few slow moments.',
+    'Inventive ideas and memorable characters—nearly perfect.',
+    'Smart, heartfelt, and exciting. I will revisit this world.',
+    'A strong entry with clever twists and vivid scenes.',
+  ],
+  3: [
+    'Enjoyable overall, though the middle act dragged a little.',
+    'Solid concept with room to tighten the execution.',
+    'Some truly great chapters mixed with a few uneven beats.',
+    'Entertaining comfort read with familiar tropes.',
+  ],
+  2: [
+    'Interesting premise, but it lost me toward the end.',
+    'Could use stronger character arcs to match the worldbuilding.',
+    'A handful of standout moments, yet the plot felt rushed.',
+  ],
+  1: [
+    'Not for me—struggled to connect with the characters.',
+    'The pacing never clicked; finishing it was a chore.',
+  ],
+};
+
+let randomSeed = 1337;
+
+function seededRandom() {
+  randomSeed = (randomSeed * 1664525 + 1013904223) % 4294967296;
+  return randomSeed / 4294967296;
+}
+
+function pickRandom<T>(items: T[]): T {
+  return items[Math.floor(seededRandom() * items.length) % items.length];
+}
+
+function pickUnique<T>(source: T[], count: number): T[] {
+  const pool = [...source];
+  const selection: T[] = [];
+  while (selection.length < count && pool.length > 0) {
+    const index = Math.floor(seededRandom() * pool.length);
+    selection.push(pool.splice(index, 1)[0]);
+  }
+  return selection;
+}
+
+function uniqueBooks(books: Book[]): Book[] {
+  const seen = new Set<number>();
+  const result: Book[] = [];
+  for (const book of books) {
+    if (seen.has(book.id)) continue;
+    seen.add(book.id);
+    result.push(book);
+  }
+  return result;
+}
+
+function buildReviewText(rating: number, bookTitle: string, userName: string) {
+  const snippets = REVIEW_TEMPLATES[rating] ?? REVIEW_TEMPLATES[3];
+  const fragment = pickRandom(snippets);
+  return `${fragment} — ${userName.split(' ')[0]} on "${bookTitle}"`;
+}
+
+function ratingFor(focusGenres: string[], book: Book) {
+  const strongMatch = book.genres.some((genre) => focusGenres.includes(genre));
+  if (strongMatch) {
+    return 4 + Math.round(seededRandom());
+  }
+  return Math.max(2, Math.min(5, 2 + Math.round(seededRandom() * 3)));
+}
+
+function gatherBooksByGenres(genres: string[], genreMap: Map<string, Book[]>): Book[] {
+  const aggregated = genres.flatMap((genre) => genreMap.get(genre) ?? []);
+  return uniqueBooks(aggregated);
+}
+
+function takeFromPool(pool: Book[], count: number, seen: Set<number>): Book[] {
+  const chosen: Book[] = [];
+  const candidates = [...pool];
+  while (chosen.length < count && candidates.length > 0) {
+    const idx = Math.floor(seededRandom() * candidates.length);
+    const candidate = candidates.splice(idx, 1)[0];
+    if (!candidate) break;
+    if (seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    chosen.push(candidate);
+  }
+  return chosen;
+}
+
 async function main() {
-  // Hash passwords for the users
-  const saltRounds = 10;
-  const passwordAlice = await bcrypt.hash('password123', saltRounds);
-  const passwordBob = await bcrypt.hash('password456', saltRounds);
+  console.log('🌱 Resetting catalog, reviews, and favorites...');
+  await prisma.review.deleteMany();
+  await prisma.favorite.deleteMany();
+  await prisma.book.deleteMany();
 
-  // Create or update two dummy users (idempotent)
-  const user1 = await prisma.user.upsert({
-    where: { email: 'alice@example.com' },
-    update: { hashedPassword: passwordAlice, name: 'Alice' },
-    create: { name: 'Alice', email: 'alice@example.com', hashedPassword: passwordAlice },
+  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+
+  const userProfiles: SeedUserProfile[] = [
+    { name: 'Alice Carter', email: 'alice@example.com', favoriteGenres: ['Science Fiction', 'Adventure'], secondaryGenres: ['Mystery', 'Thriller'] },
+    { name: 'Bob Nguyen', email: 'bob@example.com', favoriteGenres: ['Fantasy', 'Young Adult'], secondaryGenres: ['Romance', 'Adventure'] },
+    { name: 'Charlie Rivers', email: 'charlie@example.com', favoriteGenres: ['Mystery', 'Thriller'] },
+    { name: 'Dana Morales', email: 'dana@example.com', favoriteGenres: ['Historical Fiction', 'Romance'], secondaryGenres: ['Poetry'] },
+    { name: 'Elliot Zhang', email: 'elliot@example.com', favoriteGenres: ['Science Fiction', 'Dystopian'] },
+    { name: 'Farah Idris', email: 'farah@example.com', favoriteGenres: ['Non-Fiction', 'Biography'], secondaryGenres: ['Business'] },
+    { name: 'Gina Torres', email: 'gina@example.com', favoriteGenres: ['Fantasy', 'Adventure'], secondaryGenres: ['Horror'] },
+    { name: 'Hector Silva', email: 'hector@example.com', favoriteGenres: ['Thriller', 'Mystery'], secondaryGenres: ['Science Fiction'] },
+    { name: 'Isabella Rossi', email: 'isabella@example.com', favoriteGenres: ['Romance', 'Young Adult'], secondaryGenres: ['Fantasy'] },
+    { name: 'Joon Park', email: 'joon@example.com', favoriteGenres: ['Science Fiction', 'Non-Fiction'], secondaryGenres: ['Business'] },
+    { name: 'Kavya Shah', email: 'kavya@example.com', favoriteGenres: ['Poetry', 'Historical Fiction'], secondaryGenres: ['Romance'] },
+    { name: 'Logan Brooks', email: 'logan@example.com', favoriteGenres: ['Horror', 'Thriller'], secondaryGenres: ['Mystery'] },
+    { name: 'Maya Hernandez', email: 'maya@example.com', favoriteGenres: ['Self-Help', 'Non-Fiction'], secondaryGenres: ['Biography'] },
+    { name: 'Noel Gallagher', email: 'noel@example.com', favoriteGenres: ['Business', 'Science Fiction'], secondaryGenres: ['Adventure'] },
+    { name: 'Olivia Bennett', email: 'olivia@example.com', favoriteGenres: ['Fantasy', 'Romance'], secondaryGenres: ['Young Adult'] },
+  ];
+
+  const seededUsers = [] as Array<SeedUserProfile & { id: number }>;
+
+  for (const profile of userProfiles) {
+    const user = await prisma.user.upsert({
+      where: { email: profile.email },
+      update: { name: profile.name, hashedPassword: passwordHash },
+      create: { name: profile.name, email: profile.email, hashedPassword: passwordHash },
+    });
+    seededUsers.push({ ...profile, id: user.id });
+  }
+
+  console.log(`👥 Prepared ${seededUsers.length} demo users (password: ${DEFAULT_PASSWORD}).`);
+
+  const curatedBooks = BOOK_CATALOG.map((book) => ({
+    title: book.title,
+    author: book.author,
+    description: book.description,
+    genres: Array.from(book.genres),
+    publishedYear: book.publishedYear,
+    coverImageURL: book.coverImageURL,
+  }));
+
+  await prisma.book.createMany({
+    data: curatedBooks,
+    skipDuplicates: true,
   });
 
-  const user2 = await prisma.user.upsert({
-    where: { email: 'bob@example.com' },
-    update: { hashedPassword: passwordBob, name: 'Bob' },
-    create: { name: 'Bob', email: 'bob@example.com', hashedPassword: passwordBob },
-  });
+  const books = await prisma.book.findMany({ orderBy: { id: 'asc' } });
+  console.log(`📚 Seeded ${books.length} curated books with authentic cover imagery.`);
 
-  console.log('Created users:', { user1, user2 });
-
-  // Create dummy books
-  const books = await prisma.book.createMany({
-    data: [
-      {
-        title: 'The Whispering Woods',
-        author: 'Elara Vance',
-        description: 'A fantasy novel about a hidden world in a magical forest.',
-        coverImageURL: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=2787',
-        genres: ['Fantasy', 'Adventure'],
-        publishedYear: 2021,
-      },
-      {
-        title: 'Cybernetic Dreams',
-        author: 'Jax Cortex',
-        description: 'A sci-fi thriller set in a dystopian future where AI reigns supreme.',
-        coverImageURL: 'https://images.unsplash.com/photo-1518774783334-a32a62dcbf93?q=80&w=2772',
-        genres: ['Science Fiction', 'Dystopian'],
-        publishedYear: 2023,
-      },
-      {
-        title: 'The Last Alchemist',
-        author: 'Rena Petronis',
-        description: 'A historical fiction about the quest for the philosopher\'s stone.',
-        coverImageURL: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=2787',
-        genres: ['Historical Fiction', 'Mystery'],
-        publishedYear: 2019,
-      },
-      {
-        title: 'Echoes of the Void',
-        author: 'Kaelen Stratos',
-        description: 'A space opera epic with warring galactic empires and ancient secrets.',
-        coverImageURL: 'https://images.unsplash.com/photo-1588421357574-87938a86fa28?q=80&w=2835',
-        genres: ['Science Fiction', 'Space Opera'],
-        publishedYear: 2022,
-      },
-      {
-        title: 'The Baker of Ginger Street',
-        author: 'Penelope Crumble',
-        description: 'A heartwarming tale of a small-town baker who changes lives with her recipes.',
-        coverImageURL: 'https://images.unsplash.com/photo-1528745098341-2d7f5e533c6e?q=80&w=2865',
-        genres: ['Contemporary', 'Fiction'],
-        publishedYear: 2020,
-      },
-       {
-        title: "The Silent Patient",
-        author: "Alex Michaelides",
-        description: "A shocking psychological thriller of a woman's act of violence against her husband—and of the therapist obsessed with uncovering her motive.",
-        coverImageURL: "https://images.unsplash.com/photo-1589998059171-988d887df646?q=80&w=2940",
-        genres: ["Thriller", "Mystery"],
-        publishedYear: 2019
-      },
-      {
-        title: "Dune",
-        author: "Frank Herbert",
-        description: "Set on the desert planet Arrakis, Dune is the story of the boy Paul Atreides, heir to a noble family tasked with ruling an inhospitable world where the only thing of value is the 'spice' melange, a drug capable of extending life and enhancing consciousness.",
-        coverImageURL: "https://images.unsplash.com/photo-1603289983377-16cb3a6d7a17?q=80&w=2824",
-        genres: ["Science Fiction", "Adventure"],
-        publishedYear: 1965
-      },
-      {
-        title: "Pride and Prejudice",
-        author: "Jane Austen",
-        description: "A classic novel of manners, it follows the turbulent relationship between Elizabeth Bennet, the daughter of a country gentleman, and Fitzwilliam Darcy, a rich aristocratic landowner.",
-        coverImageURL: "https://images.unsplash.com/photo-1550399105-c4db5fb85c18?q=80&w=2940",
-        genres: ["Classic", "Romance"],
-        publishedYear: 1813
-      },
-      {
-        title: "To Kill a Mockingbird",
-        author: "Harper Lee",
-        description: "The unforgettable novel of a childhood in a sleepy Southern town and the crisis of conscience that rocked it, To Kill A Mockingbird became both an instant bestseller and a critical success when it was first published in 1960.",
-        coverImageURL: "https://images.unsplash.com/photo-1543002588-b9b6562934c2?q=80&w=2865",
-        genres: ["Classic", "Fiction"],
-        publishedYear: 1960
-      },
-      {
-        title: "1984",
-        author: "George Orwell",
-        description: "A dystopian social science fiction novel and cautionary tale. It was published on 8 June 1949 by Secker & Warburg as Orwell's ninth and final book completed in his lifetime.",
-        coverImageURL: "https://images.unsplash.com/photo-1516981993241-5838a393d07c?q=80&w=2865",
-        genres: ["Dystopian", "Science Fiction"],
-        publishedYear: 1949
+  const genreIndex = new Map<string, Book[]>();
+  for (const genre of GENRES) {
+    genreIndex.set(genre, []);
+  }
+  for (const book of books) {
+    for (const genre of book.genres) {
+      const bucket = genreIndex.get(genre);
+      if (!bucket) {
+        genreIndex.set(genre, [book]);
+      } else {
+        bucket.push(book);
       }
-    ],
-    skipDuplicates: true, // Optional: useful if you run the seed script multiple times
-  });
-
-  console.log(`Created ${books.count} books.`);
-
-  // To create reviews, we need the IDs of the books we just created.
-  // Let's fetch them back from the database.
-  const allBooks = await prisma.book.findMany();
-  
-  // Create some reviews
-  const review1 = await prisma.review.create({
-    data: {
-      rating: 5,
-      text: "Absolutely captivating! A must-read for any fantasy lover.",
-      userId: user1.id,
-      bookId: allBooks[0].id, // The Whispering Woods
     }
-  });
-  
-  const review2 = await prisma.review.create({
-    data: {
-      rating: 4,
-      text: "A thrilling ride from start to finish. The world-building is incredible.",
-      userId: user2.id,
-      bookId: allBooks[1].id, // Cybernetic Dreams
+  }
+
+  const favoritesData: { userId: number; bookId: number }[] = [];
+  const reviewsData: {
+    userId: number;
+    bookId: number;
+    rating: number;
+    text: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }[] = [];
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  for (const user of seededUsers) {
+    const focusGenres = user.favoriteGenres;
+    const secondaryGenres = user.secondaryGenres ?? pickUnique(GENRES.filter((genre) => !focusGenres.includes(genre)), 2);
+
+    const favoriteSeen = new Set<number>();
+    const reviewSeen = new Set<number>();
+
+    const focusFavorites = gatherBooksByGenres(focusGenres, genreIndex);
+    const secondaryFavorites = gatherBooksByGenres(secondaryGenres, genreIndex);
+
+    const favorites = [
+      ...takeFromPool(focusFavorites, 9, favoriteSeen),
+      ...takeFromPool(secondaryFavorites, 4, favoriteSeen),
+    ];
+
+    if (favorites.length < 14) {
+      favorites.push(...takeFromPool(books, 14 - favorites.length, favoriteSeen));
     }
-  });
 
-  const review3 = await prisma.review.create({
-    data: {
-      rating: 3,
-      text: "An interesting concept, but the pacing felt a bit slow in the middle.",
-      userId: user1.id,
-      bookId: allBooks[1].id, // Cybernetic Dreams
+    for (const book of favorites) {
+      favoritesData.push({ userId: user.id, bookId: book.id });
     }
-  });
 
-  const review4 = await prisma.review.create({
-    data: {
-      rating: 5,
-      text: "I couldn't put it down. This is a modern classic.",
-      userId: user2.id,
-      bookId: allBooks[3].id, // Echoes of the Void
+    const reviewFocusCount = 14 + Math.floor(seededRandom() * 4);
+    const reviewSecondaryCount = 8 + Math.floor(seededRandom() * 4);
+
+    const reviewBooks = [
+      ...takeFromPool(focusFavorites, reviewFocusCount, reviewSeen),
+      ...takeFromPool(secondaryFavorites, reviewSecondaryCount, reviewSeen),
+    ];
+
+    if (reviewBooks.length < 26) {
+      reviewBooks.push(...takeFromPool(books, 26 - reviewBooks.length, reviewSeen));
     }
+
+    for (const book of reviewBooks) {
+      const rating = ratingFor(focusGenres, book);
+      const daysAgo = Math.floor(seededRandom() * 540);
+      const createdAt = new Date(Date.now() - daysAgo * DAY_MS);
+      const updatedAt = new Date(createdAt.getTime() + Math.floor(seededRandom() * 72) * 60 * 60 * 1000);
+
+      reviewsData.push({
+        userId: user.id,
+        bookId: book.id,
+        rating,
+        text: buildReviewText(rating, book.title, user.name),
+        createdAt,
+        updatedAt,
+      });
+    }
+  }
+
+  await prisma.favorite.createMany({ data: favoritesData, skipDuplicates: true });
+  await prisma.review.createMany({ data: reviewsData, skipDuplicates: true });
+
+  await prisma.book.updateMany({
+    data: { avgRating: 0, reviewCount: 0 },
   });
 
-  console.log('Created reviews:', { review1, review2, review3, review4 });
-
-  // Recalculate avgRating and reviewCount for books that have reviews
   const stats = await prisma.review.groupBy({
     by: ['bookId'],
     _avg: { rating: true },
     _count: { _all: true },
   });
 
-  for (const s of stats) {
-    const avg = s._avg.rating ?? 0;
-    const rounded = Math.round(avg * 10) / 10; // one decimal place
+  for (const stat of stats) {
+    const avg = stat._avg.rating ?? 0;
+    const rounded = Math.round(avg * 10) / 10;
     await prisma.book.update({
-      where: { id: s.bookId },
-      data: { avgRating: rounded, reviewCount: s._count._all },
+      where: { id: stat.bookId },
+      data: { avgRating: rounded, reviewCount: stat._count._all },
     });
   }
 
-  console.log('Recalculated book stats for seeded reviews.');
+  console.log(`⭐ Created ${reviewsData.length} reviews and ${favoritesData.length} favorites.`);
+  console.log('✅ Seeding complete. Demo users can sign in with the shared password above.');
 }
 
-// execute the main function
 main()
-  .catch((e) => {
-    console.error(e);
+  .catch((error) => {
+    console.error('❌ Seed failed', error);
     process.exit(1);
   })
   .finally(async () => {
-    // close Prisma Client at the end
     await prisma.$disconnect();
   });
